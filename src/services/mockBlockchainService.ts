@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import supabaseService from './supabaseService';
+import neonService from './neonService';
 
 interface Event {
   eventId: string;
@@ -32,11 +32,11 @@ class MockBlockchainService {
   private events: Map<string, Event> = new Map();
   private blockNumber = 100000;
   private isInitialized = false;
-  private useSupabase = true; // Flag to use Supabase instead of localStorage
+  private useNeon = true; // Flag to use Neon instead of localStorage
 
   constructor() {
-    if (this.useSupabase) {
-      this.loadFromSupabase();
+    if (this.useNeon) {
+      this.loadFromNeon();
     } else {
       this.loadFromStorage();
     }
@@ -44,35 +44,35 @@ class MockBlockchainService {
     this.setupStorageListener();
   }
 
-  private async loadFromSupabase() {
+  private async loadFromNeon() {
     try {
-      const batches = await supabaseService.getAllBatches();
+      const batches = await neonService.getAllBatches();
       for (const batch of batches) {
-        const events = await supabaseService.getEventsByBatch(batch.batch_id);
+        const events = await neonService.getEventsByBatch(batch.batchId);
         const batchData: Batch = {
-          batchId: batch.batch_id,
-          herbSpecies: batch.herb_species,
+          batchId: batch.batchId,
+          herbSpecies: batch.herbSpecies,
           creator: batch.creator,
-          creationTime: batch.created_at,
-          lastUpdated: batch.updated_at,
-          currentStatus: batch.current_status,
+          creationTime: batch.creationTime,
+          lastUpdated: batch.lastUpdated,
+          currentStatus: batch.currentStatus,
           events: events.map(event => ({
-            eventId: event.event_id,
-            eventType: event.event_type,
-            batchId: event.batch_id,
-            timestamp: event.created_at,
+            eventId: event.eventId,
+            eventType: event.eventType,
+            batchId: event.batchId,
+            timestamp: event.timestamp,
             participant: event.participant,
             organization: event.organization,
             data: event.data,
-            ipfsHash: event.ipfs_hash,
-            qrCodeHash: event.qr_code_hash,
-            transactionId: event.transaction_id,
-            blockNumber: event.block_number,
-            gasUsed: event.gas_used,
+            ipfsHash: event.ipfsHash,
+            qrCodeHash: event.qrCodeHash,
+            transactionId: event.transactionId,
+            blockNumber: event.blockNumber,
+            gasUsed: event.gasUsed,
             status: event.status
           }))
         };
-        this.batches.set(batch.batch_id, batchData);
+        this.batches.set(batch.batchId, batchData);
         
         // Also populate events map
         for (const event of batchData.events) {
@@ -80,8 +80,8 @@ class MockBlockchainService {
         }
       }
     } catch (error) {
-      console.warn('Failed to load from Supabase, falling back to localStorage:', error);
-      this.useSupabase = false;
+      console.warn('Failed to load from Neon, falling back to localStorage:', error);
+      this.useNeon = false;
       this.loadFromStorage();
     }
   }
@@ -90,8 +90,8 @@ class MockBlockchainService {
     // Listen for storage changes from other tabs/sessions
     window.addEventListener('storage', (e) => {
       if (e.key === 'herbionyx_batches' || e.key === 'herbionyx_events') {
-        if (this.useSupabase) {
-          this.loadFromSupabase();
+        if (this.useNeon) {
+          this.loadFromNeon();
         } else {
           this.loadFromStorage();
         }
@@ -100,8 +100,8 @@ class MockBlockchainService {
     
     // Also listen for custom events for same-tab updates
     window.addEventListener('herbionyx-data-update', () => {
-      if (this.useSupabase) {
-        this.loadFromSupabase();
+      if (this.useNeon) {
+        this.loadFromNeon();
       } else {
         this.loadFromStorage();
       }
@@ -134,8 +134,8 @@ class MockBlockchainService {
 
   private saveToStorage() {
     try {
-      if (this.useSupabase) {
-        // Data is automatically saved to Supabase in individual operations
+      if (this.useNeon) {
+        // Data is automatically saved to Neon in individual operations
         // Just dispatch the update event
       } else {
         localStorage.setItem('herbionyx_batches', JSON.stringify(Object.fromEntries(this.batches)));
@@ -150,45 +150,45 @@ class MockBlockchainService {
     }
   }
 
-  private async saveToSupabase(batch: Batch, event: Event) {
+  private async saveToNeon(batch: Batch, event: Event) {
     try {
       // Save or update batch
       const batchData = {
-        batch_id: batch.batchId,
-        herb_species: batch.herbSpecies,
+        batchId: batch.batchId,
+        herbSpecies: batch.herbSpecies,
         creator: batch.creator,
-        created_at: batch.creationTime,
-        updated_at: batch.lastUpdated,
-        current_status: batch.currentStatus,
+        creationTime: batch.creationTime,
+        lastUpdated: batch.lastUpdated,
+        currentStatus: batch.currentStatus,
         data: {
           events: batch.events.map(e => e.eventId)
         }
       };
 
-      await supabaseService.saveBatch(batchData);
+      await neonService.saveBatch(batchData);
 
       // Save event
       const eventData = {
-        event_id: event.eventId,
-        event_type: event.eventType,
-        batch_id: event.batchId,
+        eventId: event.eventId,
+        eventType: event.eventType,
+        batchId: event.batchId,
         participant: event.participant,
         organization: event.organization,
         data: event.data,
-        ipfs_hash: event.ipfsHash,
-        qr_code_hash: event.qrCodeHash,
-        transaction_id: event.transactionId,
-        block_number: event.blockNumber,
-        gas_used: event.gasUsed,
+        ipfsHash: event.ipfsHash,
+        qrCodeHash: event.qrCodeHash,
+        transactionId: event.transactionId,
+        blockNumber: event.blockNumber,
+        gasUsed: event.gasUsed,
         status: event.status,
-        created_at: event.timestamp
+        timestamp: event.timestamp
       };
 
-      await supabaseService.saveEvent(eventData);
+      await neonService.saveEvent(eventData);
     } catch (error) {
-      console.error('Failed to save to Supabase:', error);
+      console.error('Failed to save to Neon:', error);
       // Fallback to localStorage
-      this.useSupabase = false;
+      this.useNeon = false;
       this.saveToStorage();
     }
   }
@@ -256,8 +256,8 @@ class MockBlockchainService {
     this.events.set(eventId, event);
     this.batches.set(batchId, batch);
     
-    if (this.useSupabase) {
-      await this.saveToSupabase(batch, event);
+    if (this.useNeon) {
+      await this.saveToNeon(batch, event);
     } else {
       this.saveToStorage();
     }
@@ -320,8 +320,8 @@ class MockBlockchainService {
     this.events.set(eventId, event);
     this.batches.set(eventData.batchId, batch);
     
-    if (this.useSupabase) {
-      await this.saveToSupabase(batch, event);
+    if (this.useNeon) {
+      await this.saveToNeon(batch, event);
     } else {
       this.saveToStorage();
     }
@@ -384,8 +384,8 @@ class MockBlockchainService {
     this.events.set(eventId, event);
     this.batches.set(eventData.batchId, batch);
     
-    if (this.useSupabase) {
-      await this.saveToSupabase(batch, event);
+    if (this.useNeon) {
+      await this.saveToNeon(batch, event);
     } else {
       this.saveToStorage();
     }
@@ -452,8 +452,8 @@ class MockBlockchainService {
     this.events.set(eventId, event);
     this.batches.set(eventData.batchId, batch);
     
-    if (this.useSupabase) {
-      await this.saveToSupabase(batch, event);
+    if (this.useNeon) {
+      await this.saveToNeon(batch, event);
     } else {
       this.saveToStorage();
     }
@@ -486,8 +486,8 @@ class MockBlockchainService {
 
   async getAllBatches() {
     // Always reload from storage to get latest data
-    if (this.useSupabase) {
-      await this.loadFromSupabase();
+    if (this.useNeon) {
+      await this.loadFromNeon();
     } else {
       this.loadFromStorage();
     }
@@ -505,8 +505,8 @@ class MockBlockchainService {
 
   async getBatchInfo(eventIdOrBatchId: string) {
     // Always reload from storage to get latest data
-    if (this.useSupabase) {
-      await this.loadFromSupabase();
+    if (this.useNeon) {
+      await this.loadFromNeon();
     } else {
       this.loadFromStorage();
     }
