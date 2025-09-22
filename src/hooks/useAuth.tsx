@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import supabaseService from '../services/supabaseService';
 
 interface User {
   address: string;
@@ -38,31 +39,52 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const login = async (email: string, password: string) => {
-    // Simulate login with demo users
-    const demoUsers = [
-      { email: 'collector@demo.com', password: 'demo123', role: 1, name: 'Demo Collector', organization: 'Collector Group Demo' },
-      { email: 'tester@demo.com', password: 'demo123', role: 2, name: 'Demo Tester', organization: 'Testing Labs Demo' },
-      { email: 'processor@demo.com', password: 'demo123', role: 3, name: 'Demo Processor', organization: 'Processing Unit Demo' },
-      { email: 'manufacturer@demo.com', password: 'demo123', role: 4, name: 'Demo Manufacturer', organization: 'Manufacturing Plant Demo' }
-    ];
+    try {
+      // Try Supabase authentication first
+      const authResult = await supabaseService.signIn(email, password);
+      const profile = await supabaseService.getUserProfile(authResult.user.id);
+      
+      const userData = {
+        address: profile.address || email,
+        name: profile.name,
+        organization: profile.organization,
+        role: profile.role,
+        email: profile.email
+      };
 
-    const user = demoUsers.find(u => u.email === email && u.password === password);
-    if (!user) {
-      throw new Error('Invalid credentials');
+      localStorage.setItem('token', authResult.session?.access_token || `supabase_token_${Date.now()}`);
+      localStorage.setItem('userRole', profile.role.toString());
+      localStorage.setItem('herbionyx_user', JSON.stringify(userData));
+      setUser(userData);
+    } catch (supabaseError) {
+      // Fallback to demo users for development
+      console.warn('Supabase auth failed, using demo mode:', supabaseError);
+      
+      const demoUsers = [
+        { email: 'collector@demo.com', password: 'demo123', role: 1, name: 'Demo Collector', organization: 'Collector Group Demo' },
+        { email: 'tester@demo.com', password: 'demo123', role: 2, name: 'Demo Tester', organization: 'Testing Labs Demo' },
+        { email: 'processor@demo.com', password: 'demo123', role: 3, name: 'Demo Processor', organization: 'Processing Unit Demo' },
+        { email: 'manufacturer@demo.com', password: 'demo123', role: 4, name: 'Demo Manufacturer', organization: 'Manufacturing Plant Demo' }
+      ];
+
+      const user = demoUsers.find(u => u.email === email && u.password === password);
+      if (!user) {
+        throw new Error('Invalid credentials');
+      }
+
+      const userData = {
+        address: email,
+        name: user.name,
+        organization: user.organization,
+        role: user.role,
+        email: email
+      };
+
+      localStorage.setItem('token', `demo_token_${Date.now()}`);
+      localStorage.setItem('userRole', user.role.toString());
+      localStorage.setItem('herbionyx_user', JSON.stringify(userData));
+      setUser(userData);
     }
-
-    const userData = {
-      address: email,
-      name: user.name,
-      organization: user.organization,
-      role: user.role,
-      email: email
-    };
-
-    localStorage.setItem('token', `demo_token_${Date.now()}`);
-    localStorage.setItem('userRole', user.role.toString());
-    localStorage.setItem('herbionyx_user', JSON.stringify(userData));
-    setUser(userData);
   };
 
   const loginAsConsumer = () => {
@@ -80,7 +102,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(consumerUser);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await supabaseService.signOut();
+    } catch (error) {
+      console.warn('Supabase signout failed:', error);
+    }
+    
     localStorage.removeItem('token');
     localStorage.removeItem('userRole');
     localStorage.removeItem('herbionyx_user');
