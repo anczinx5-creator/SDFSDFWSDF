@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import supabaseService from './supabaseService';
 
 interface Event {
   eventId: string;
@@ -31,24 +32,79 @@ class MockBlockchainService {
   private events: Map<string, Event> = new Map();
   private blockNumber = 100000;
   private isInitialized = false;
+  private useSupabase = true; // Flag to use Supabase instead of localStorage
 
   constructor() {
-    this.loadFromStorage();
+    if (this.useSupabase) {
+      this.loadFromSupabase();
+    } else {
+      this.loadFromStorage();
+    }
     // Set up real-time storage listener
     this.setupStorageListener();
+  }
+
+  private async loadFromSupabase() {
+    try {
+      const batches = await supabaseService.getAllBatches();
+      for (const batch of batches) {
+        const events = await supabaseService.getEventsByBatch(batch.batch_id);
+        const batchData: Batch = {
+          batchId: batch.batch_id,
+          herbSpecies: batch.herb_species,
+          creator: batch.creator,
+          creationTime: batch.created_at,
+          lastUpdated: batch.updated_at,
+          currentStatus: batch.current_status,
+          events: events.map(event => ({
+            eventId: event.event_id,
+            eventType: event.event_type,
+            batchId: event.batch_id,
+            timestamp: event.created_at,
+            participant: event.participant,
+            organization: event.organization,
+            data: event.data,
+            ipfsHash: event.ipfs_hash,
+            qrCodeHash: event.qr_code_hash,
+            transactionId: event.transaction_id,
+            blockNumber: event.block_number,
+            gasUsed: event.gas_used,
+            status: event.status
+          }))
+        };
+        this.batches.set(batch.batch_id, batchData);
+        
+        // Also populate events map
+        for (const event of batchData.events) {
+          this.events.set(event.eventId, event);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load from Supabase, falling back to localStorage:', error);
+      this.useSupabase = false;
+      this.loadFromStorage();
+    }
   }
 
   private setupStorageListener() {
     // Listen for storage changes from other tabs/sessions
     window.addEventListener('storage', (e) => {
       if (e.key === 'herbionyx_batches' || e.key === 'herbionyx_events') {
-        this.loadFromStorage();
+        if (this.useSupabase) {
+          this.loadFromSupabase();
+        } else {
+          this.loadFromStorage();
+        }
       }
     });
     
     // Also listen for custom events for same-tab updates
     window.addEventListener('herbionyx-data-update', () => {
-      this.loadFromStorage();
+      if (this.useSupabase) {
+        this.loadFromSupabase();
+      } else {
+        this.loadFromStorage();
+      }
     });
   }
   private loadFromStorage() {
@@ -78,14 +134,62 @@ class MockBlockchainService {
 
   private saveToStorage() {
     try {
-      localStorage.setItem('herbionyx_batches', JSON.stringify(Object.fromEntries(this.batches)));
-      localStorage.setItem('herbionyx_events', JSON.stringify(Object.fromEntries(this.events)));
-      localStorage.setItem('herbionyx_block_number', this.blockNumber.toString());
+      if (this.useSupabase) {
+        // Data is automatically saved to Supabase in individual operations
+        // Just dispatch the update event
+      } else {
+        localStorage.setItem('herbionyx_batches', JSON.stringify(Object.fromEntries(this.batches)));
+        localStorage.setItem('herbionyx_events', JSON.stringify(Object.fromEntries(this.events)));
+        localStorage.setItem('herbionyx_block_number', this.blockNumber.toString());
+      }
       
       // Dispatch custom event to notify other components
       window.dispatchEvent(new CustomEvent('herbionyx-data-update'));
     } catch (error) {
       console.warn('Failed to save to storage:', error);
+    }
+  }
+
+  private async saveToSupabase(batch: Batch, event: Event) {
+    try {
+      // Save or update batch
+      const batchData = {
+        batch_id: batch.batchId,
+        herb_species: batch.herbSpecies,
+        creator: batch.creator,
+        created_at: batch.creationTime,
+        updated_at: batch.lastUpdated,
+        current_status: batch.currentStatus,
+        data: {
+          events: batch.events.map(e => e.eventId)
+        }
+      };
+
+      await supabaseService.saveBatch(batchData);
+
+      // Save event
+      const eventData = {
+        event_id: event.eventId,
+        event_type: event.eventType,
+        batch_id: event.batchId,
+        participant: event.participant,
+        organization: event.organization,
+        data: event.data,
+        ipfs_hash: event.ipfsHash,
+        qr_code_hash: event.qrCodeHash,
+        transaction_id: event.transactionId,
+        block_number: event.blockNumber,
+        gas_used: event.gasUsed,
+        status: event.status,
+        created_at: event.timestamp
+      };
+
+      await supabaseService.saveEvent(eventData);
+    } catch (error) {
+      console.error('Failed to save to Supabase:', error);
+      // Fallback to localStorage
+      this.useSupabase = false;
+      this.saveToStorage();
     }
   }
 
@@ -151,7 +255,12 @@ class MockBlockchainService {
 
     this.events.set(eventId, event);
     this.batches.set(batchId, batch);
-    this.saveToStorage();
+    
+    if (this.useSupabase) {
+      await this.saveToSupabase(batch, event);
+    } else {
+      this.saveToStorage();
+    }
 
     // Simulate SMS notification
     this.simulateSMSNotification('collection', batchData, eventId);
@@ -210,7 +319,12 @@ class MockBlockchainService {
 
     this.events.set(eventId, event);
     this.batches.set(eventData.batchId, batch);
-    this.saveToStorage();
+    
+    if (this.useSupabase) {
+      await this.saveToSupabase(batch, event);
+    } else {
+      this.saveToStorage();
+    }
 
     // Simulate SMS notification
     this.simulateSMSNotification('quality_test', eventData, eventId);
@@ -269,7 +383,12 @@ class MockBlockchainService {
 
     this.events.set(eventId, event);
     this.batches.set(eventData.batchId, batch);
-    this.saveToStorage();
+    
+    if (this.useSupabase) {
+      await this.saveToSupabase(batch, event);
+    } else {
+      this.saveToStorage();
+    }
 
     // Simulate SMS notification
     this.simulateSMSNotification('processing', eventData, eventId);
@@ -332,7 +451,12 @@ class MockBlockchainService {
 
     this.events.set(eventId, event);
     this.batches.set(eventData.batchId, batch);
-    this.saveToStorage();
+    
+    if (this.useSupabase) {
+      await this.saveToSupabase(batch, event);
+    } else {
+      this.saveToStorage();
+    }
 
     // Simulate SMS notification
     this.simulateSMSNotification('manufacturing', eventData, eventId);
@@ -362,7 +486,11 @@ class MockBlockchainService {
 
   async getAllBatches() {
     // Always reload from storage to get latest data
-    this.loadFromStorage();
+    if (this.useSupabase) {
+      await this.loadFromSupabase();
+    } else {
+      this.loadFromStorage();
+    }
     return Array.from(this.batches.values()).map(batch => ({
       batchId: batch.batchId,
       herbSpecies: batch.herbSpecies,
@@ -377,9 +505,11 @@ class MockBlockchainService {
 
   async getBatchInfo(eventIdOrBatchId: string) {
     // Always reload from storage to get latest data
-    this.loadFromStorage();
-    // Always reload from storage to get latest data
-    this.loadFromStorage();
+    if (this.useSupabase) {
+      await this.loadFromSupabase();
+    } else {
+      this.loadFromStorage();
+    }
     
     // Try as batch ID first
     let batch = this.batches.get(eventIdOrBatchId);
@@ -419,6 +549,8 @@ class MockBlockchainService {
           manufacturerName: event.eventType === 'MANUFACTURING' ? event.participant : undefined,
           herbSpecies: event.eventType === 'COLLECTION' ? event.data.herbSpecies : undefined,
           weight: event.eventType === 'COLLECTION' ? event.data.weight : undefined,
+          pricePerUnit: event.eventType === 'COLLECTION' ? event.data.pricePerUnit : undefined,
+          totalPrice: event.eventType === 'COLLECTION' ? event.data.totalPrice : undefined,
           location: event.data.location,
           qualityGrade: event.eventType === 'COLLECTION' ? event.data.qualityGrade : undefined,
           notes: event.data.notes,
