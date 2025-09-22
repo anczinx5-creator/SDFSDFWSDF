@@ -7,19 +7,22 @@ class QRService {
   async generateQR(data: any, title: string): Promise<{ success: boolean; dataURL?: string; trackingUrl?: string; qrHash?: string; error?: string }> {
     try {
       // Encode batchId and eventId to handle special characters
-      const trackingUrl = `${this.baseUrl}/track/${encodeURIComponent(data.batchId)}/${encodeURIComponent(data.eventId)}`;
-      
+      // Create a comprehensive QR data object that works with any QR scanner
       const qrData = {
-        url: trackingUrl,
+        url: `${this.baseUrl}/track/${encodeURIComponent(data.batchId)}/${encodeURIComponent(data.eventId)}`,
         batchId: data.batchId,
         eventId: data.eventId,
         type: data.type,
+        herbSpecies: data.herbSpecies,
+        participant: data.collector || data.tester || data.processor || data.manufacturer,
         timestamp: Date.now(),
         version: '1.0',
-        network: 'hyperledger-fabric'
+        network: 'hyperledger-fabric',
+        platform: 'HerbionYX'
       };
-
-      const qrString = trackingUrl;
+      
+      // Use JSON string for comprehensive data that any QR scanner can read
+      const qrString = JSON.stringify(qrData);
       const qrHash = await this.generateHash(JSON.stringify(qrData));
       
       const qrCodeDataURL = await QRCode.toDataURL(qrString, {
@@ -35,12 +38,12 @@ class QRService {
         scale: 8
       });
 
-      console.log(`✅ Real QR code generated for ${data.type}: ${trackingUrl}`);
+      console.log(`✅ Real QR code generated for ${data.type}: ${qrData.url}`);
 
       return {
         success: true,
         dataURL: qrCodeDataURL,
-        trackingUrl,
+        trackingUrl: qrData.url,
         qrHash
       };
     } catch (error) {
@@ -101,6 +104,21 @@ class QRService {
       console.log('Parsing QR string:', qrString); // Debug: Log the scanned QR content
       let qrData;
 
+      // First try to parse as JSON (new comprehensive format)
+      try {
+        qrData = JSON.parse(qrString);
+        // Validate that it's a HerbionYX QR code
+        if (qrData.platform === 'HerbionYX' && qrData.batchId && qrData.eventId) {
+          return {
+            success: true,
+            data: qrData
+          };
+        }
+      } catch (jsonError) {
+        // Not JSON, continue with URL parsing
+      }
+
+      // Handle URL format QR codes
       if (qrString.includes('/track/')) {
         const path = qrString.split('/track/')[1];
         const parts = path.split('/');
@@ -147,25 +165,20 @@ class QRService {
           throw new Error('Invalid QR code format - unexpected URL structure');
         }
       } else {
-        // Try to parse as JSON
-        try {
-          qrData = JSON.parse(qrString);
-        } catch {
-          // If not JSON, treat as direct event ID
-          const eventId = qrString.trim();
-          qrData = { eventId, type: 'direct_id' };
-          if (typeof blockchainService.getEventInfo === 'function') {
-            try {
-              const batchInfo = await blockchainService.getEventInfo(eventId);
-              if (batchInfo?.batchId) {
-                qrData.batchId = batchInfo.batchId;
-              }
-            } catch (error) {
-              console.warn('Failed to fetch batchId for direct eventId:', error);
+        // If not JSON and not URL, treat as direct event ID
+        const eventId = qrString.trim();
+        qrData = { eventId, type: 'direct_id' };
+        if (typeof blockchainService.getEventInfo === 'function') {
+          try {
+            const batchInfo = await blockchainService.getEventInfo(eventId);
+            if (batchInfo?.batchId) {
+              qrData.batchId = batchInfo.batchId;
             }
-          } else {
-            console.warn('Skipping batchId lookup: blockchainService.getEventInfo is not available');
+          } catch (error) {
+            console.warn('Failed to fetch batchId for direct eventId:', error);
           }
+        } else {
+          console.warn('Skipping batchId lookup: blockchainService.getEventInfo is not available');
         }
       }
 
@@ -192,9 +205,20 @@ class QRService {
   }
 
   async generatePrintableQR(batchId: string, eventId: string, additionalInfo: any) {
-    const trackingUrl = `${this.baseUrl}/track/${encodeURIComponent(batchId)}/${encodeURIComponent(eventId)}`;
+    const qrData = {
+      url: `${this.baseUrl}/track/${encodeURIComponent(batchId)}/${encodeURIComponent(eventId)}`,
+      batchId,
+      eventId,
+      type: additionalInfo.currentStage,
+      herbSpecies: additionalInfo.herbSpecies,
+      participant: additionalInfo.participant,
+      timestamp: Date.now(),
+      version: '1.0',
+      network: 'hyperledger-fabric',
+      platform: 'HerbionYX'
+    };
     
-    return await QRCode.toDataURL(trackingUrl, {
+    return await QRCode.toDataURL(JSON.stringify(qrData), {
       errorCorrectionLevel: 'H',
       type: 'image/png',
       quality: 1.0,

@@ -17,10 +17,15 @@ const CollectionForm: React.FC = () => {
   const [qrResult, setQrResult] = useState<any>(null);
   const [weather, setWeather] = useState<any>(null);
   const [zoneValidation, setZoneValidation] = useState<any>(null);
+  const [filteredHerbs, setFilteredHerbs] = useState(AYURVEDIC_HERBS);
+  const [herbSearchTerm, setHerbSearchTerm] = useState('');
+  const [showHerbDropdown, setShowHerbDropdown] = useState(false);
 
   const [formData, setFormData] = useState({
     herbSpecies: '',
     weight: '',
+    pricePerUnit: '',
+    totalPrice: '',
     harvestDate: new Date().toISOString().split('T')[0],
     zone: '', // Now free text input
     qualityGrade: '', // Now mandatory
@@ -34,6 +39,31 @@ const CollectionForm: React.FC = () => {
     initializeBlockchain();
   }, []);
 
+  // Filter herbs based on search term
+  useEffect(() => {
+    if (herbSearchTerm.trim() === '') {
+      setFilteredHerbs(AYURVEDIC_HERBS);
+    } else {
+      const filtered = AYURVEDIC_HERBS.filter(herb => {
+        const searchLower = herbSearchTerm.toLowerCase();
+        return herb.name.toLowerCase().includes(searchLower) ||
+               herb.scientificName.toLowerCase().includes(searchLower) ||
+               herb.name.toLowerCase().replace(/\s+/g, '').includes(searchLower.replace(/\s+/g, ''));
+      });
+      setFilteredHerbs(filtered);
+    }
+  }, [herbSearchTerm]);
+
+  // Calculate total price when weight or price per unit changes
+  useEffect(() => {
+    if (formData.weight && formData.pricePerUnit) {
+      const total = parseFloat(formData.weight) * parseFloat(formData.pricePerUnit);
+      setFormData(prev => ({
+        ...prev,
+        totalPrice: total.toFixed(2)
+      }));
+    }
+  }, [formData.weight, formData.pricePerUnit]);
   const initializeBlockchain = async () => {
     try {
       await blockchainService.initialize();
@@ -151,6 +181,18 @@ const CollectionForm: React.FC = () => {
     }));
   };
 
+  const handleHerbSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setHerbSearchTerm(value);
+    setFormData(prev => ({ ...prev, herbSpecies: value }));
+    setShowHerbDropdown(true);
+  };
+
+  const selectHerb = (herb: any) => {
+    setFormData(prev => ({ ...prev, herbSpecies: herb.name }));
+    setHerbSearchTerm(herb.name);
+    setShowHerbDropdown(false);
+  };
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -198,6 +240,8 @@ const CollectionForm: React.FC = () => {
           longitude: location.longitude,
           zone: formData.zone
         },
+        pricePerUnit: parseFloat(formData.pricePerUnit),
+        totalPrice: parseFloat(formData.totalPrice),
         qualityGrade: formData.qualityGrade,
         notes: formData.notes,
         images: imageHash ? [imageHash] : []
@@ -263,6 +307,8 @@ const CollectionForm: React.FC = () => {
       setFormData({
         herbSpecies: '',
         weight: '',
+        pricePerUnit: '',
+        totalPrice: '',
         harvestDate: new Date().toISOString().split('T')[0],
         zone: '',
         qualityGrade: '', // Will be required
@@ -270,6 +316,7 @@ const CollectionForm: React.FC = () => {
         collectorGroupName: user?.name || '',
         image: null
       });
+      setHerbSearchTerm('');
     } catch (error) {
       console.error('Collection creation error:', error);
       setError((error as Error).message);
@@ -307,6 +354,10 @@ const CollectionForm: React.FC = () => {
               <div>
                 <span className="font-medium text-green-700">Weight:</span>
                 <p className="text-green-900">{qrResult.weight}g</p>
+              </div>
+              <div>
+                <span className="font-medium text-green-700">Total Price:</span>
+                <p className="text-green-900">₹{qrResult.totalPrice}</p>
               </div>
               <div>
                 <span className="font-medium text-green-700">Location:</span>
@@ -363,20 +414,33 @@ const CollectionForm: React.FC = () => {
               <label className="block text-sm font-medium text-green-700 mb-2">
                 Herb Species *
               </label>
-              <select
-                name="herbSpecies"
-                value={formData.herbSpecies}
-                onChange={handleInputChange}
-                required
-                className="w-full px-4 py-3 border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              >
-                <option value="">Select Herb Species</option>
-                {AYURVEDIC_HERBS.map((herb) => (
-                  <option key={herb.id} value={herb.name}>
-                    {herb.name} ({herb.scientificName})
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <input
+                  type="text"
+                  name="herbSpecies"
+                  value={formData.herbSpecies}
+                  onChange={handleHerbSearch}
+                  onFocus={() => setShowHerbDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowHerbDropdown(false), 200)}
+                  required
+                  placeholder="Type to search herbs (e.g., 'ash' for Ashwagandha)"
+                  className="w-full px-4 py-3 border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+                {showHerbDropdown && filteredHerbs.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-green-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredHerbs.slice(0, 10).map((herb) => (
+                      <div
+                        key={herb.id}
+                        onClick={() => selectHerb(herb)}
+                        className="px-4 py-3 hover:bg-green-50 cursor-pointer border-b border-green-100 last:border-b-0"
+                      >
+                        <div className="font-medium text-green-800">{herb.name}</div>
+                        <div className="text-sm text-green-600 italic">{herb.scientificName}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>
@@ -396,6 +460,38 @@ const CollectionForm: React.FC = () => {
               />
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-green-700 mb-2">
+                Price per Unit (₹/gram) *
+              </label>
+              <input
+                type="number"
+                name="pricePerUnit"
+                value={formData.pricePerUnit}
+                onChange={handleInputChange}
+                required
+                min="0"
+                step="0.01"
+                placeholder="Enter price per gram"
+                className="w-full px-4 py-3 border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-green-700 mb-2">
+                Total Price (₹)
+              </label>
+              <input
+                type="number"
+                name="totalPrice"
+                value={formData.totalPrice}
+                readOnly
+                step="0.01"
+                placeholder="Auto-calculated"
+                className="w-full px-4 py-3 border border-green-200 rounded-lg bg-green-50 text-green-800 font-medium"
+              />
+              <p className="text-xs text-green-600 mt-1">Automatically calculated: Weight × Price per Unit</p>
+            </div>
             <div>
               <label className="block text-sm font-medium text-green-700 mb-2">
                 Harvest Date *

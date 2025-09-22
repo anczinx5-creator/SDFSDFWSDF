@@ -1,29 +1,72 @@
 import React, { useState } from 'react';
 import { Star, Send, MessageSquare, TrendingUp } from 'lucide-react';
+import { supabase } from '../../services/supabaseService';
 
 const PlatformRating: React.FC = () => {
   const [rating, setRating] = useState(0);
   const [feedback, setFeedback] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [hoveredStar, setHoveredStar] = useState(0);
+  const [stats, setStats] = useState({
+    averageRating: 0,
+    totalReviews: 0,
+    satisfactionRate: 0
+  });
+  const [loading, setLoading] = useState(false);
+
+  React.useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('platform_ratings')
+        .select('rating');
+      
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        const totalReviews = data.length;
+        const averageRating = data.reduce((sum, item) => sum + item.rating, 0) / totalReviews;
+        const satisfactionRate = (data.filter(item => item.rating >= 4).length / totalReviews) * 100;
+        
+        setStats({
+          averageRating: parseFloat(averageRating.toFixed(1)),
+          totalReviews,
+          satisfactionRate: parseFloat(satisfactionRate.toFixed(0))
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     
-    // Simulate submission
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Store in localStorage for demo
-    const existingRatings = JSON.parse(localStorage.getItem('platformRatings') || '[]');
-    existingRatings.push({
-      rating,
-      feedback,
-      timestamp: new Date().toISOString(),
-      id: Math.random().toString(36).substr(2, 9)
-    });
-    localStorage.setItem('platformRatings', JSON.stringify(existingRatings));
-    
-    setSubmitted(true);
+    try {
+      const { error } = await supabase
+        .from('platform_ratings')
+        .insert([
+          {
+            rating,
+            feedback,
+            created_at: new Date().toISOString()
+          }
+        ]);
+      
+      if (error) throw error;
+      
+      setSubmitted(true);
+      await fetchStats(); // Refresh stats after submission
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      alert('Failed to submit rating. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleReset = () => {
@@ -43,9 +86,18 @@ const PlatformRating: React.FC = () => {
           <p className="text-green-600 mb-6">Your feedback has been submitted successfully</p>
           <button
             onClick={handleReset}
-            className="bg-gradient-to-r from-green-500 to-emerald-600 text-white py-2 px-6 rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all duration-200"
-          >
-            Submit Another Rating
+            disabled={rating === 0 || loading}
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                <span>Submitting...</span>
+              </>
+            ) : (
+              <>
+                <Send className="h-5 w-5" />
+                <span>Submit Rating</span>
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -134,23 +186,23 @@ const PlatformRating: React.FC = () => {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="text-center p-4 bg-green-50 rounded-lg">
-              <div className="text-2xl font-bold text-green-800">4.8</div>
+              <div className="text-2xl font-bold text-green-800">{stats.averageRating || 0}</div>
               <div className="text-sm text-green-600">Average Rating</div>
               <div className="flex justify-center mt-2">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <Star
                     key={star}
-                    className={`h-4 w-4 ${star <= 4 ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
+                    className={`h-4 w-4 ${star <= Math.round(stats.averageRating) ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
                   />
                 ))}
               </div>
             </div>
             <div className="text-center p-4 bg-blue-50 rounded-lg">
-              <div className="text-2xl font-bold text-blue-800">1,247</div>
+              <div className="text-2xl font-bold text-blue-800">{stats.totalReviews}</div>
               <div className="text-sm text-blue-600">Total Reviews</div>
             </div>
             <div className="text-center p-4 bg-purple-50 rounded-lg">
-              <div className="text-2xl font-bold text-purple-800">98%</div>
+              <div className="text-2xl font-bold text-purple-800">{stats.satisfactionRate}%</div>
               <div className="text-sm text-purple-600">Satisfaction Rate</div>
             </div>
           </div>
