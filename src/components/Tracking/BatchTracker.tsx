@@ -278,10 +278,17 @@ const BatchTracker: React.FC = () => {
                         {event.eventType === 'COLLECTION' && (
                           <div className="bg-green-50 rounded-lg p-4">
                             <h6 className="font-medium text-green-800 mb-2">Collection Details</h6>
-                            <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div className="grid grid-cols-2 gap-2 text-sm mb-3">
                               <div><span className="font-medium">Weight:</span> {event.data?.weight}g</div>
                               <div><span className="font-medium">Quality:</span> {event.data?.qualityGrade}</div>
+                              <div><span className="font-medium">Price/Unit:</span> ₹{event.data?.pricePerUnit}/g</div>
+                              <div><span className="font-medium">Total Price:</span> ₹{event.data?.totalPrice}</div>
                               <div className="col-span-2"><span className="font-medium">Zone:</span> {event.data?.location?.zone}</div>
+                            </div>
+                            <div className="text-xs text-green-700 bg-green-100 p-2 rounded">
+                              <strong>Collector:</strong> {event.participant} | 
+                              <strong> Organization:</strong> {event.organization} |
+                              <strong> Notes:</strong> {event.data?.notes || 'None'}
                             </div>
                           </div>
                         )}
@@ -289,10 +296,15 @@ const BatchTracker: React.FC = () => {
                         {event.eventType === 'QUALITY_TEST' && (
                           <div className="bg-blue-50 rounded-lg p-4">
                             <h6 className="font-medium text-blue-800 mb-2">Test Results</h6>
-                            <div className="grid grid-cols-3 gap-2 text-sm">
+                            <div className="grid grid-cols-3 gap-2 text-sm mb-3">
                               <div><span className="font-medium">Moisture:</span> {event.data?.moistureContent}%</div>
                               <div><span className="font-medium">Purity:</span> {event.data?.purity}%</div>
                               <div><span className="font-medium">Pesticide:</span> {event.data?.pesticideLevel} ppm</div>
+                            </div>
+                            <div className="text-xs text-blue-700 bg-blue-100 p-2 rounded">
+                              <strong>Tester:</strong> {event.participant} | 
+                              <strong> Method:</strong> {event.data?.testMethod} |
+                              <strong> Lab:</strong> {event.organization}
                             </div>
                           </div>
                         )}
@@ -300,11 +312,17 @@ const BatchTracker: React.FC = () => {
                         {event.eventType === 'PROCESSING' && (
                           <div className="bg-purple-50 rounded-lg p-4">
                             <h6 className="font-medium text-purple-800 mb-2">Processing Details</h6>
-                            <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div className="grid grid-cols-2 gap-2 text-sm mb-3">
                               <div><span className="font-medium">Method:</span> {event.data?.method}</div>
                               <div><span className="font-medium">Yield:</span> {event.data?.yield}g</div>
                               {event.data?.temperature && <div><span className="font-medium">Temperature:</span> {event.data.temperature}°C</div>}
                               {event.data?.duration && <div><span className="font-medium">Duration:</span> {event.data.duration}</div>}
+                              {event.data?.yieldPercentage && <div><span className="font-medium">Efficiency:</span> {event.data.yieldPercentage.toFixed(1)}%</div>}
+                            </div>
+                            <div className="text-xs text-purple-700 bg-purple-100 p-2 rounded">
+                              <strong>Processor:</strong> {event.participant} | 
+                              <strong> Facility:</strong> {event.organization} |
+                              <strong> Notes:</strong> {event.data?.notes || 'None'}
                             </div>
                           </div>
                         )}
@@ -312,11 +330,18 @@ const BatchTracker: React.FC = () => {
                         {event.eventType === 'MANUFACTURING' && (
                           <div className="bg-orange-50 rounded-lg p-4">
                             <h6 className="font-medium text-orange-800 mb-2">Product Details</h6>
-                            <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div className="grid grid-cols-2 gap-2 text-sm mb-3">
                               <div><span className="font-medium">Product:</span> {event.data?.productName}</div>
                               <div><span className="font-medium">Type:</span> {event.data?.productType}</div>
                               <div><span className="font-medium">Quantity:</span> {event.data?.quantity} {event.data?.unit}</div>
                               {event.data?.expiryDate && <div><span className="font-medium">Expiry:</span> {event.data.expiryDate}</div>}
+                              {event.data?.certificationId && <div><span className="font-medium">Cert ID:</span> {event.data.certificationId}</div>}
+                              {event.data?.brandName && <div><span className="font-medium">Brand:</span> {event.data.brandName}</div>}
+                            </div>
+                            <div className="text-xs text-orange-700 bg-orange-100 p-2 rounded">
+                              <strong>Manufacturer:</strong> {event.participant} | 
+                              <strong> Plant:</strong> {event.organization} |
+                              <strong> Location:</strong> {event.data?.manufacturingLocation?.zone || 'Not specified'}
                             </div>
                           </div>
                         )}

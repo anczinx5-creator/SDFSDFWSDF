@@ -94,9 +94,24 @@ const ConsumerView: React.FC = () => {
         eventId = eventId.split('/track/')[1];
       }
 
+      // Handle JSON QR codes (new format)
+      try {
+        const qrData = JSON.parse(eventId);
+        if (qrData.platform === 'HerbionYX' && qrData.batchId) {
+          eventId = qrData.batchId;
+        }
+      } catch (e) {
+        // Not JSON, continue with original eventId
+      }
+
       const data = await blockchainService.getBatchInfo(eventId);
       const batch = data.batch;
       const events = batch.events || [];
+      
+      // Validate that this QR belongs to this specific batch
+      if (!events || events.length === 0) {
+        throw new Error('No events found for this batch. Invalid QR code.');
+      }
       
       const productInfo = {
         productName: getProductNameFromEvents(events),
@@ -118,7 +133,7 @@ const ConsumerView: React.FC = () => {
     } catch (error) {
       console.error('Consumer verification error:', error);
       if (!skipFormCheck) {
-        setError('Product not found. Please check the QR code or product ID.');
+        setError(`Product not found or invalid QR code: ${(error as Error).message}`);
       }
     } finally {
       setLoading(false);
@@ -191,6 +206,8 @@ const ConsumerView: React.FC = () => {
       harvestDate: new Date(collectionEvent.timestamp).toLocaleDateString(),
       collector: collectionEvent.participant,
       weight: collectionEvent.data?.weight,
+      pricePerUnit: collectionEvent.data?.pricePerUnit,
+      totalPrice: collectionEvent.data?.totalPrice,
       qualityGrade: collectionEvent.data?.qualityGrade,
       coordinates: collectionEvent.data?.location ? {
         latitude: parseFloat(collectionEvent.data.location.latitude).toFixed(6),
@@ -260,13 +277,13 @@ const ConsumerView: React.FC = () => {
   const getEventDetails = (event: any) => {
     switch (event.eventType) {
       case 'COLLECTION':
-        return `Collected ${event.data?.weight}g of ${event.data?.herbSpecies} (${event.data?.qualityGrade} grade)`;
+        return `Collected ${event.data?.weight}g of ${event.data?.herbSpecies} (${event.data?.qualityGrade} grade) at ₹${event.data?.pricePerUnit}/g (Total: ₹${event.data?.totalPrice})`;
       case 'QUALITY_TEST':
-        return `Quality test: ${event.data?.purity}% purity, ${event.data?.moistureContent}% moisture`;
+        return `Quality test: ${event.data?.purity}% purity, ${event.data?.moistureContent}% moisture, ${event.data?.pesticideLevel} ppm pesticides`;
       case 'PROCESSING':
-        return `Processed using ${event.data?.method}, yield: ${event.data?.yield}g`;
+        return `Processed using ${event.data?.method}, yield: ${event.data?.yield}g (${event.data?.yieldPercentage?.toFixed(1)}% efficiency)`;
       case 'MANUFACTURING':
-        return `Manufactured ${event.data?.quantity} ${event.data?.unit} of ${event.data?.productName}`;
+        return `Manufactured ${event.data?.quantity} ${event.data?.unit} of ${event.data?.productName} (Exp: ${event.data?.expiryDate || 'N/A'})`;
       default:
         return event.notes || `${event.eventType.replace('_', ' ')} completed successfully`;
     }
@@ -438,11 +455,19 @@ const ConsumerView: React.FC = () => {
                       </p>
                     )}
                   </div>
-                  <div className="bg-purple-50 rounded-lg p-4">
-                    <h5 className="font-semibold text-purple-800 mb-2">Collection Details</h5>
-                    <p className="text-purple-900">Weight: {productInfo.originDetails.weight}g</p>
-                    <p className="text-purple-900">Grade: {productInfo.originDetails.qualityGrade}</p>
-                    <p className="text-purple-700 text-sm">By: {productInfo.originDetails.collector}</p>
+                  <div className="bg-green-50 rounded-lg p-4">
+                    <h5 className="font-semibold text-green-800 mb-2">Collection Details</h5>
+                    <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                      <div><span className="font-medium">Weight:</span> {productInfo.originDetails.weight}g</div>
+                      <div><span className="font-medium">Grade:</span> {productInfo.originDetails.qualityGrade}</div>
+                      <div><span className="font-medium">Price/Unit:</span> ₹{productInfo.originDetails.pricePerUnit}/g</div>
+                      <div><span className="font-medium">Total Price:</span> ₹{productInfo.originDetails.totalPrice}</div>
+                      <div className="col-span-2"><span className="font-medium">Zone:</span> {productInfo.originDetails.harvestLocation}</div>
+                    </div>
+                    <div className="text-xs text-green-700 bg-green-100 p-2 rounded">
+                      <strong>Collector:</strong> {productInfo.originDetails.collector} | 
+                      <strong> Harvest Date:</strong> {productInfo.originDetails.harvestDate}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -617,7 +642,12 @@ const ConsumerView: React.FC = () => {
                             </div>
                           </div>
                           
-                          <p className="text-gray-700 bg-white rounded-lg p-3 border">{step.details}</p>
+                          <div className="bg-white rounded-lg p-3 border">
+                            <p className="text-gray-700 mb-2">{step.details}</p>
+                            <div className="text-xs text-gray-500 border-t pt-2">
+                              <strong>Hover for more details:</strong> Additional technical specifications and quality parameters available on hover
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
